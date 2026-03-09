@@ -132,62 +132,37 @@
 
 Результат: архитектурный переход от compute к verify для ATE pairing.
 
-## Этап 6. Контрактный и off-chain стек (trustless-версия R4/R8)
+## Этап 6. Контрактный и off-chain стек
 
-1. Важная фиксация статуса:
-   1. Текущие `R4/R8` в коде — это прототип интерфейса и модели данных, но backend сейчас ECDSA/quorum ECDSA.
-   2. Для диссертационной цели “контракт не доверяет precompute-кэшу” этого недостаточно.
-   3. На этом этапе ECDSA-backend заменяется на proof-backend, который доказывает корректность pairing-trace.
-2. Контракты verification-слоя (целевая структура):
-   1. `PairingRelationVerifier` как statement-gateway (`P`, `Q/fixedQId`, context, epoch, expected output digest).
-   2. `PairingArtifactVerifier` как commitment-gateway (`fixedQCommitment`, `artifactRoot`, anti-replay/expiry).
-   3. Новый proof-adapter интерфейс (вместо ECDSA): `IPairingTraceProofVerifier` с проверкой succinct proof.
-3. Что именно проверяется on-chain (минимально необходимая логика):
-   1. Привязка параметров: `fixedQId -> fixedQCommitment` из реестра.
-   2. Привязка артефакта: входной witness/trace ссылается на тот же commitment (через `artifactRoot`/public inputs proof).
-   3. Корректность вычисления pairing через proof, а не через доверенную подпись:
-      1. boundary constraints (инициализация состояния Miller/FE),
-      2. transition constraints (каждый шаг Miller и fixed-chain FE),
-      3. terminal constraints (финальный выход совпадает с заявленным digest/result).
-   4. Доменные проверки (`chainId`, `verifier address`, `context`, `epoch`) и анти-replay.
-4. Off-chain pipeline:
-   1. Построение полной трассы `Miller + FinalExp` (включая precompute-линии/коэффициенты).
-   2. Коммитмент к трассе и артефактам (`artifactRoot`).
-   3. Генерация succinct proof корректности трассы относительно публичных входов.
-5. Тесты (обязательные для trustless-режима):
-   1. Позитив: корректная трасса и proof принимаются.
-   2. Негатив: подмена любой части cache/lines/coeffs отвергается.
-   3. Негатив: корректный output при некорректной внутренней трассе отвергается.
-   4. Fuzz: случайные повреждения witness/commitment/public inputs.
-6. Газ-бенчи новой архитектуры:
-   1. verify-only cost (proof verification),
-   2. calldata cost (proof + public inputs),
-   3. total cost для single/multi checks.
+1. Контракты verification-слоя:
+   1. `PairingRelationVerifier` (проверка ограничений).
+   2. Адаптеры форматов witness/commitments.
+2. Off-chain pipeline:
+   1. Генерация trace/witness.
+   2. Коммитменты к данным.
+   3. Генерация succinct proof (или иной компактной доказательной формы).
+3. Тесты:
+   1. Positive/negative fraud cases.
+   2. Fuzz на поврежденные witness blocks.
+   3. Совместимость с baseline inputs.
+4. Газ-бенчи новой архитектуры:
+   1. Verify cost.
+   2. Calldata cost.
+   3. Total cost на 1/2/N pairing checks.
 
-Результат: практическая trustless-реализация “off-chain compute, on-chain verify” для ATE pairing.
+Результат: практическая реализация нового режима.
 
-## Этап 7. Агрегация и folding (trustless-версия R5)
+## Этап 7. Агрегация и folding
 
-1. Важная фиксация статуса:
-   1. Текущий `R5` в коде агрегирует attestations/claims, но не агрегирует доказательства корректности pairing-trace.
-   2. Целевой `R5` должен агрегировать именно succinct proofs (или их рекурсивные обертки).
-2. Целевая схема:
-   1. Off-chain: множество индивидуальных pairing-trace proofs сворачиваются (fold/recursive aggregation) в один batch-proof.
-   2. On-chain: проверяется один агрегированный proof + корректность batch commitments.
-   3. Для адресации отдельных утверждений сохраняется Merkle/commitment слой, но доверие идет от batch-proof, а не от подписей.
-3. Что должен гарантировать on-chain verify на этом этапе:
-   1. каждая запись batch принадлежит заявленному commitment root;
-   2. агрегированный proof действительно покрывает все включенные записи;
-   3. подмена одной записи или одного precompute-артефакта ломает проверку batch-proof.
-4. Экспериментальная цель:
-   1. измерить амортизацию газа на одну pairing-проверку при росте batch;
-   2. найти порог batch-size, после которого folding выгоднее одиночной verify-модели.
-5. Бенчи:
-   1. verify gas для batch размера `1/2/4/8/...`,
-   2. cost per claim,
-   3. proof size / calldata / latency.
+1. Добавить folding/aggregation слой для batch verify.
+2. Цель:
+   1. Амортизировать on-chain verify cost на много pairing-проверок.
+3. Проверить интеграцию с Sonobe-style идеями (агрегация доказательств).
+4. Бенчи:
+   1. Cost per check при росте batch.
+   2. Размер доказательства vs газ.
 
-Результат: масштабируемая trustless-архитектура с агрегацией доказательств, а не подписей.
+Результат: масштабируемая версия новой архитектуры.
 
 ## Этап 8. Вторая теоретическая часть для новой архитектуры
 
